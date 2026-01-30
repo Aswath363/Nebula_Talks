@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "mcp__web-reader__webReader",
+      "mcp__deepwiki__read_wiki_structure",
+      "Bash(ls:*)",
+      "Bash(findstr:*)",
+      "Bash(netstat:*)",
+      "Skill(threejs-animation)",
+      "Bash(del:*)",
+      "Bash(del threelipsync.ts)"
+    ]
+  }
+}
