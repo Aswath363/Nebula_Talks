@@ -9,7 +9,9 @@
       "Bash(netstat:*)",
       "Skill(threejs-animation)",
       "Bash(del:*)",
-      "Bash(del threelipsync.ts)"
+      "Bash(del threelipsync.ts)",
+      "Bash(tree:*)",
+      "Bash(wc:*)"
     ]
   }
 }

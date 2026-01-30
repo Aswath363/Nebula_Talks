@@ -1,0 +1,65 @@
+{
+  "robots": [
+    {
+      "id": "demo-robot",
+      "name": "Demo Robot (HTTP)",
+      "protocol": "http",
+      "enabled": true,
+      "url": "http://localhost:5000/robot/command",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
+      },
+      "commands": {
+        "user_left_after_speaking": {
+          "action": "wave",
+          "speed": "normal"
+        },
+        "wave_hand": {
+          "action": "wave",
+          "duration": 2000
+        },
+        "thumbs_up": {
+          "action": "thumbs_up",
+          "duration": 1500
+        },
+        "greet": {
+          "action": "greet",
+          "message": "Hello! Thanks for visiting."
+        }
+      }
+    },
+    {
+      "id": "mqtt-robot",
+      "name": "MQTT Robot",
+      "protocol": "mqtt",
+      "enabled": false,
+      "mqtt_broker": "localhost",
+      "mqtt_port": 1883,
+      "mqtt_topic": "robot/commands",
+      "mqtt_username": null,
+      "mqtt_password": null,
+      "commands": {
+        "user_left_after_speaking": {
+          "command": "wave",
+          "parameters": {
+            "speed": "normal"
+          }
+        }
+      }
+    },
+    {
+      "id": "serial-robot",
+      "name": "Serial/Arduino Robot",
+      "protocol": "serial",
+      "enabled": false,
+      "serial_port": "/dev/ttyUSB0",
+      "serial_baudrate": 9600,
+      "commands": {
+        "user_left_after_speaking": "WAVE\n",
+        "wave_hand": "WAVE\n",
+        "thumbs_up": "THUMBS_UP\n",
+        "idle": "IDLE\n"
+      }
+    }
+  ]
+}

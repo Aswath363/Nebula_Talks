@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+
+# Virtual environment
+venv/
+.venv/
+
+# Robot configurations (may contain sensitive data)
+robots.json
+event_prompts.json

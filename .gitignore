@@ -1,24 +1,65 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+dist/
+frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist-info/
+venv/
+.venv/
+
+# Environment variables (contains API keys!)
+.env
+.env.local
+frontend/.env
+backend/.env
+
+# YOLO model files (large binary files)
+*.pt
+*.pth
+*.onnx
+
+# Data files (generated configurations)
+backend/event_prompts.json
+backend/robots.json
+backend/yolov8n.pt
+
+# IDEs
+.vscode/*
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
 # Logs
-logs
 *.log
 npm-debug.log*
-yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+yarn-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Temporary files
+.cache/
+.vite/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Agent files
+.claude/
+
+# Claude Code settings (personal)
+.claude/settings.local.json
