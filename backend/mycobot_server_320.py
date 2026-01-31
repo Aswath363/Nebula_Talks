@@ -1,13 +1,7 @@
 """
-myCobot 320 Pi WebSocket Server
+myCobot 320 Pi WebSocket Server - Fixed Version
 
-Run this on your myCobot 320 Pi to receive signals from Nebula Talks.
-
-Install dependencies:
-pip install pymycobot websockets
-
-Usage:
-python mycobot_server.py
+Uses auto-detected port and baudrate that matches your working setup.
 """
 
 import asyncio
@@ -15,24 +9,38 @@ import json
 import logging
 from websockets.server import serve
 from pymycobot import MyCobot320
-from time import sleep
+import serial.tools.list_ports
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# myCobot 320 configuration
-MC_PORT = "/dev/ttyAMA0"  # GPIO serial port on Pi
-MC_BAUD = 1000000
+
+# Auto-detect port like your working script
+def get_mycobot_port():
+    """Auto-detect myCobot serial port"""
+    ports = list(serial.tools.list_ports.comports())
+    if ports:
+        port = ports[0].device
+        logger.info(f"Auto-detected port: {port}")
+        return port
+    else:
+        # Fallback to default
+        logger.warning("No ports detected, using /dev/ttyAMA0")
+        return "/dev/ttyAMA0"
 
 
 class MyCobotController:
     """Controller for myCobot 320 with predefined movements"""
 
-    def __init__(self, port: str = MC_PORT, baudrate: int = MC_BAUD):
+    def __init__(self, port: str = None, baudrate: int = 115200):
+        if port is None:
+            port = get_mycobot_port()
+
         try:
             self.mc = MyCobot320(port, baudrate)
             self.mc.power_on()
-            logger.info("myCobot 320 connected and powered on")
+            logger.info(f"myCobot 320 connected on {port} at {baudrate} baud")
         except Exception as e:
             logger.error(f"Failed to connect to myCobot: {e}")
             self.mc = None
@@ -40,49 +48,78 @@ class MyCobotController:
     def is_connected(self) -> bool:
         return self.mc is not None
 
-    def wave_hand(self, speed: str = "normal"):
-        """Wave hand gesture"""
+    def move_joint_smooth(self, joint_id, angles, speed):
+        """Move joint smoothly through angles - like your working script"""
         if not self.mc:
             return
 
-        logger.info(f"Wave hand (speed: {speed})")
+        for angle in angles:
+            current = self.mc.get_angles()
+            current[joint_id - 1] = angle  # Convert to 0-indexed
+            self.mc.send_angles(current, speed)
+            time.sleep(0.5)
 
-        # Get current angles
-        current_angles = self.mc.get_angles()
-        logger.info(f"Current angles: {current_angles}")
+    def go_home(self):
+        """Return to home position"""
+        if not self.mc:
+            return
+        logger.info("Going to home position")
+        self.mc.send_angles([0, 0, 0, 0, 0, 0], 25)
+        time.sleep(2)
 
-        # Wave sequence - side to side movement
-        wave_positions = [
-            [0, 0, 0, 0, 90, 0],  # Start position
-            [0, 0, 0, 0, 45, 0],  # Wrist left
-            [0, 0, 0, 0, 135, 0],  # Wrist right
-            [0, 0, 0, 0, 45, 0],  # Wrist left
-            [0, 0, 0, 0, 135, 0],  # Wrist right
-            [0, 0, 0, 0, 90, 0],  # Back to center
-        ]
+    def wave_hand(self):
+        """Wave hand gesture - using your working parameters"""
+        if not self.mc:
+            return
 
-        speed_val = 80 if speed == "fast" else 50
+        logger.info("Wave hand")
 
-        for angles in wave_positions:
-            self.mc.send_angles(angles, speed_val)
-            sleep(0.3)
+        TRUNK_JOINT = 3
+        WAVE_AMPLITUDE = 15
+        WAVE_SPEED = 30
+        WAVE_COUNT = 3
 
-        # Return to home
         self.go_home()
 
-    def thumbs_up(self, speed: str = "normal"):
+        for _ in range(WAVE_COUNT):
+            self.move_joint_smooth(
+                TRUNK_JOINT, [WAVE_AMPLITUDE, -WAVE_AMPLITUDE], WAVE_SPEED
+            )
+            time.sleep(0.2)
+
+        self.go_home()
+
+    def nod_head(self):
+        """Nod head gesture - using your working parameters"""
+        if not self.mc:
+            return
+
+        logger.info("Nod head")
+
+        NOD_JOINT = 1
+        NOD_AMPLITUDE = 10
+        NOD_SPEED = 25
+        NOD_COUNT = 3
+
+        self.go_home()
+
+        for _ in range(NOD_COUNT):
+            self.move_joint_smooth(NOD_JOINT, [NOD_AMPLITUDE, NOD_AMPLITUDE], NOD_SPEED)
+            time.sleep(0.2)
+
+        self.go_home()
+
+    def thumbs_up(self):
         """Thumbs up gesture"""
         if not self.mc:
             return
 
-        logger.info(f"Thumbs up (speed: {speed})")
+        logger.info("Thumbs up")
 
         # Thumbs up pose
         thumbs_pose = [0, -30, 60, -90, 90, 0]
-        speed_val = 80 if speed == "fast" else 50
-
-        self.mc.send_angles(thumbs_pose, speed_val)
-        sleep(1.5)
+        self.mc.send_angles(thumbs_pose, 50)
+        time.sleep(1.5)
 
         self.go_home()
 
@@ -96,7 +133,7 @@ class MyCobotController:
         # Pointing pose
         point_pose = [0, 20, 40, -90, 0, 0]
         self.mc.send_angles(point_pose, 50)
-        sleep(1.5)
+        time.sleep(1.5)
 
         self.go_home()
 
@@ -109,30 +146,21 @@ class MyCobotController:
 
         # Bow
         self.mc.send_angles([0, 0, -30, 0, 0, 0], 40)
-        sleep(0.8)
+        time.sleep(0.8)
 
         # Return to upright
         self.mc.send_angles([0, 0, 0, 0, 0, 0], 40)
-        sleep(0.5)
+        time.sleep(0.5)
 
         # Wave
-        self.wave_hand("normal")
-
-    def go_home(self):
-        """Return to home position"""
-        if not self.mc:
-            return
-
-        logger.info("Going to home position")
-        self.mc.send_angles([0, 0, 0, 0, 0, 0], 60)
-        sleep(0.5)
+        self.wave_hand()
 
     def celebrate(self):
-        """Celebration gesture - arms up and wiggle"""
+        """Celebration gesture"""
         if not self.mc:
             return
 
-        logger.info("Celebration!")
+        logger.info("Celebrating!")
 
         celebrate_poses = [
             [0, -45, 90, -90, 90, 0],
@@ -143,7 +171,7 @@ class MyCobotController:
 
         for pose in celebrate_poses:
             self.mc.send_angles(pose, 80)
-            sleep(0.3)
+            time.sleep(0.3)
 
         self.go_home()
 
@@ -153,18 +181,17 @@ class MyCobotController:
             return {"status": "error", "message": "Robot not connected"}
 
         action = command.get("action", "")
-        speed = command.get("speed", "normal")
         message = command.get("message", "")
 
         logger.info(f"Executing command: {action}")
 
         try:
             if action == "wave":
-                self.wave_hand(speed)
+                self.wave_hand()
                 return {"status": "success", "action": "wave", "message": "Waved hand!"}
 
             elif action == "thumbs_up":
-                self.thumbs_up(speed)
+                self.thumbs_up()
                 return {
                     "status": "success",
                     "action": "thumbs_up",
@@ -190,6 +217,10 @@ class MyCobotController:
             elif action == "home":
                 self.go_home()
                 return {"status": "success", "action": "home", "message": "Going home"}
+
+            elif action == "nod":
+                self.nod_head()
+                return {"status": "success", "action": "nod", "message": "Nodding!"}
 
             elif action == "move_to":
                 # Custom coordinates
@@ -236,15 +267,20 @@ async def handle_websocket(websocket, path):
 
     try:
         # Send welcome message
+        version = "Unknown"
+        if controller.mc:
+            try:
+                version = controller.mc.get_system_version()
+            except:
+                pass
+
         await websocket.send(
             json.dumps(
                 {
                     "type": "connected",
                     "message": "myCobot 320 ready for commands",
                     "robot": "myCobot 320 Pi",
-                    "version": controller.mc.get_system_version()
-                    if controller.mc
-                    else "Unknown",
+                    "version": version,
                 }
             )
         )
@@ -260,12 +296,13 @@ async def handle_websocket(websocket, path):
 
                 # Map signal types to robot actions
                 action_mapping = {
-                    "user_left_after_speaking": {"action": "wave", "speed": "normal"},
-                    "wave_hand": {"action": "wave", "speed": "normal"},
-                    "thumbs_up": {"action": "thumbs_up", "speed": "normal"},
+                    "user_left_after_speaking": {"action": "wave"},
+                    "wave_hand": {"action": "wave"},
+                    "thumbs_up": {"action": "thumbs_up"},
                     "greet": {"action": "greet"},
                     "celebrate": {"action": "celebrate"},
                     "point": {"action": "point"},
+                    "nod": {"action": "nod"},
                     "home": {"action": "home"},
                 }
 
@@ -313,18 +350,18 @@ async def main():
     """Main server"""
     global controller
 
-    # Initialize myCobot controller
-    controller = MyCobotController()
+    # Initialize myCobot controller with auto-detection
+    controller = MyCobotController(baudrate=115200)
 
     # WebSocket server configuration
-    HOST = "0.0.0.0"  # Listen on all interfaces
+    HOST = "0.0.0.0"
     PORT = 8765
 
     logger.info(f"Starting myCobot WebSocket server on {HOST}:{PORT}")
     logger.info("Waiting for Nebula Talks connection...")
 
     async with serve(handle_websocket, HOST, PORT):
-        await asyncio.Future()  # Run forever
+        await asyncio.Future()
 
 
 if __name__ == "__main__":
