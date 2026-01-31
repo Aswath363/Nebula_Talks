@@ -4,12 +4,17 @@ myCobot 320 WebSocket Integration for Nebula Talks
 This module handles the WebSocket connection to the myCobot 320 Pi server.
 Run mycobot_server.py on your myCobot Pi first, then the backend will connect.
 """
+
 import asyncio
 import json
 import logging
 from typing import Optional
 import websockets
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,10 +37,7 @@ class MyCobotClient:
             try:
                 logger.info(f"Connecting to myCobot at {self.uri}...")
                 self.websocket = await websockets.connect(
-                    self.uri,
-                    ping_interval=20,
-                    ping_timeout=20,
-                    close_timeout=10
+                    self.uri, ping_interval=20, ping_timeout=20, close_timeout=10
                 )
                 self.connected = True
                 logger.info("✅ Connected to myCobot!")
@@ -102,7 +104,7 @@ class MyCobotClient:
             message = {
                 "signalType": signal_type,
                 "timestamp": datetime.now().isoformat(),
-                "data": data or {}
+                "data": data or {},
             }
 
             await self.websocket.send(json.dumps(message))
@@ -122,8 +124,12 @@ class MyCobotClient:
             logger.info("Disconnected from myCobot")
 
 
-# Global myCobot client instance
-mycobot_client = MyCobotClient()
+# Read environment variables
+MYCOBOT_HOST = os.getenv("MYCOBOT_HOST", "localhost")
+MYCOBOT_PORT = int(os.getenv("MYCOBOT_PORT", "8765"))
+
+# Global myCobot client instance - initialized with environment variables
+mycobot_client = MyCobotClient(host=MYCOBOT_HOST, port=MYCOBOT_PORT)
 
 
 async def start_mycobot_connection():
@@ -143,5 +149,5 @@ MYCOBOT_GESTURES = {
     "point": "Point forward gesture",
     "greet": "Greeting gesture (bow + wave)",
     "celebrate": "Celebration gesture",
-    "home": "Return to home position"
+    "home": "Return to home position",
 }

@@ -11,6 +11,7 @@ from websockets.server import serve
 from pymycobot import MyCobot320
 import serial.tools.list_ports
 import time
+from threading import Thread, Event
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,6 +45,14 @@ class MyCobotController:
         except Exception as e:
             logger.error(f"Failed to connect to myCobot: {e}")
             self.mc = None
+
+        # Celebration mode
+        self.celebrating = False
+        self.celebrate_thread = None
+        self.celebrate_stop_event = Event()
+        # Celebration pose to use when person leaves
+        self.EXIT_POSE = [-168.13, -52.99, 68.55, 93.16, -0.17, 0.26]
+        self.EXIT_POSE_DURATION = 15  # seconds to hold pose when person leaves
 
     def is_connected(self) -> bool:
         return self.mc is not None
@@ -175,6 +184,77 @@ class MyCobotController:
 
         self.go_home()
 
+    def start_celebrating(self):
+        """Start continuous celebration mode when person is present"""
+        if not self.mc:
+            return
+
+        if self.celebrating:
+            logger.info("Already celebrating")
+            return
+
+        self.celebrating = True
+        self.celebrate_stop_event.clear()
+
+        logger.info("Starting continuous celebration mode")
+
+        # Start celebration thread
+        self.celebrate_thread = Thread(target=self._celebrate_cycle, daemon=True)
+        self.celebrate_thread.start()
+
+    def stop_celebrating_and_exit(self):
+        """Stop celebration and go to exit pose when person leaves"""
+        if not self.celebrating:
+            logger.info("Not currently celebrating")
+            return
+
+        logger.info("Stopping celebration mode and moving to exit pose")
+        self.celebrating = False
+        self.celebrate_stop_event.set()
+
+        # Wait for thread to finish
+        if self.celebrate_thread and self.celebrate_thread.is_alive():
+            self.celebrate_thread.join(timeout=2)
+
+        # Move to exit pose and hold for 15 seconds
+        logger.info(f"Moving to exit pose: {self.EXIT_POSE}")
+        if self.mc:
+            self.mc.send_angles(self.EXIT_POSE, 50)
+            time.sleep(self.EXIT_POSE_DURATION)
+
+        # Return to home
+        logger.info("Returning to home position")
+        self.go_home()
+
+    def _celebrate_cycle(self):
+        """Background thread that continuously celebrates while person is present"""
+        try:
+            while self.celebrating and not self.celebrate_stop_event.is_set():
+                # Run the existing celebrate gesture
+                self.celebrate()
+
+                logger.info("Celebrating... waiting 5 seconds for next cycle")
+
+                # Wait 5 seconds before next celebration
+                if not self.celebrate_stop_event.wait(timeout=5):
+                    # If stop event was triggered, break
+                    logger.info("Stop event triggered")
+                    break
+
+            logger.info("Celebration cycle ended")
+
+        except Exception as e:
+            logger.error(f"Error in celebration cycle: {e}")
+            self.celebrating = False
+
+    def go_to_celebrate_pose(self):
+        """Move to celebration pose once"""
+        if not self.mc:
+            return
+
+        logger.info("Moving to celebration pose")
+        self.mc.send_angles(self.CELEBRATE_POSE, 50)
+
     def execute_command(self, command: dict):
         """Execute a command from Nebula Talks"""
         if not self.mc:
@@ -221,6 +301,24 @@ class MyCobotController:
             elif action == "nod":
                 self.nod_head()
                 return {"status": "success", "action": "nod", "message": "Nodding!"}
+
+            elif action == "start_celebrating":
+                # Start continuous celebration when person enters
+                self.start_celebrating()
+                return {
+                    "status": "success",
+                    "action": "start_celebrating",
+                    "message": "Started celebration mode!",
+                }
+
+            elif action == "stop_celebrating_and_exit":
+                # Stop celebration and go to exit pose when person leaves
+                self.stop_celebrating_and_exit()
+                return {
+                    "status": "success",
+                    "action": "stop_celebrating_and_exit",
+                    "message": "Stopped celebration and moved to exit pose",
+                }
 
             elif action == "move_to":
                 # Custom coordinates
@@ -304,6 +402,11 @@ async def handle_websocket(websocket, path):
                     "point": {"action": "point"},
                     "nod": {"action": "nod"},
                     "home": {"action": "home"},
+                    # Person presence signals for celebration mode
+                    "start_celebrating": {"action": "start_celebrating"},
+                    "stop_celebrating_and_exit": {
+                        "action": "stop_celebrating_and_exit"
+                    },
                 }
 
                 command = action_mapping.get(signal_type, signal_data)

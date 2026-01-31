@@ -1,6 +1,7 @@
 """
 FastAPI backend for YOLO-based person detection and event prompt management
 """
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -19,7 +20,12 @@ load_dotenv()
 from detection import PersonDetector
 from models import PersonDetectionRequest, PersonDetectionResponse, HealthResponse
 from robot_signal import robot_service, RobotConfig, RobotSignal, RobotProtocol
-from mycobot_integration import mycobot_client, start_mycobot_connection, send_to_mycobot, MYCOBOT_GESTURES
+from mycobot_integration import (
+    mycobot_client,
+    start_mycobot_connection,
+    send_to_mycobot,
+    MYCOBOT_GESTURES,
+)
 
 # Global detector instance
 detector: PersonDetector = None
@@ -67,14 +73,14 @@ class ConfigResponse(BaseModel):
 def load_prompts() -> Dict[str, dict]:
     """Load prompts from JSON file"""
     if os.path.exists(PROMPTS_FILE):
-        with open(PROMPTS_FILE, 'r') as f:
+        with open(PROMPTS_FILE, "r") as f:
             return json.load(f)
     return {}
 
 
 def save_prompts(prompts: Dict[str, dict]):
     """Save prompts to JSON file"""
-    with open(PROMPTS_FILE, 'w') as f:
+    with open(PROMPTS_FILE, "w") as f:
         json.dump(prompts, f, indent=2)
 
 
@@ -106,7 +112,7 @@ Tone: Energetic, funny, professional but casual.""",
             "voice": "Orus",
             "is_active": True,
             "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
+            "updated_at": datetime.now().isoformat(),
         }
         save_prompts(prompts)
 
@@ -149,7 +155,7 @@ app = FastAPI(
     title="Nebula Talks Person Detection API",
     description="YOLO-based person detection for Nebula Talks",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -165,10 +171,7 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
-    return HealthResponse(
-        status="healthy",
-        model_loaded=detector is not None
-    )
+    return HealthResponse(status="healthy", model_loaded=detector is not None)
 
 
 @app.post("/detect", response_model=PersonDetectionResponse)
@@ -180,13 +183,21 @@ async def detect_person(request: PersonDetectionRequest):
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     try:
-        person_found, confidence, bounding_box, processing_time = detector.detect_person(
-            image_data=request.image_data,
-            confidence_threshold=request.confidence_threshold
+        person_found, confidence, bounding_box, processing_time = (
+            detector.detect_person(
+                image_data=request.image_data,
+                confidence_threshold=request.confidence_threshold,
+            )
         )
 
         # Robot signal logic: Track user presence and speaking
         user_is_present = person_found
+
+        # If user was NOT present and now IS present -> person entered frame
+        if not user_was_present and user_is_present:
+            print("🚶 Person entered frame - starting celebration mode")
+            # Send celebration mode start signal to myCobot
+            await send_to_mycobot("start_celebrating")
 
         # If user was present and spoke, and now left frame -> send robot signal
         if user_was_present and user_spoken and not user_is_present:
@@ -197,14 +208,16 @@ async def detect_person(request: PersonDetectionRequest):
             # Also send to any other configured robots
             signal = RobotSignal(
                 signal_type="user_left_after_speaking",
-                data={
-                    "confidence": confidence,
-                    "frame_id": request.frame_id
-                }
+                data={"confidence": confidence, "frame_id": request.frame_id},
             )
             await robot_service.send_signal(signal)
             # Reset state
             user_spoken = False
+
+        # If user was present and now NOT present (with or without speaking) -> stop celebration and go to exit pose
+        if user_was_present and not user_is_present:
+            print("👋 Person left frame - stopping celebration and going to exit pose")
+            await send_to_mycobot("stop_celebrating_and_exit")
 
         user_was_present = user_is_present
 
@@ -213,7 +226,7 @@ async def detect_person(request: PersonDetectionRequest):
             confidence=confidence,
             bounding_box=bounding_box,
             processing_time_ms=processing_time,
-            frame_id=request.frame_id
+            frame_id=request.frame_id,
         )
 
         return response
@@ -261,7 +274,7 @@ async def get_robots():
             "url": r.url,
             "mqtt_broker": r.mqtt_broker,
             "mqtt_topic": r.mqtt_topic,
-            "serial_port": r.serial_port
+            "serial_port": r.serial_port,
         }
         for r in robot_service.robots.values()
     ]
@@ -291,7 +304,7 @@ async def add_robot(robot: dict):
         mqtt_password=robot.get("mqtt_password"),
         serial_port=robot.get("serial_port"),
         serial_baudrate=robot.get("serial_baudrate", 9600),
-        commands=robot.get("commands", {})
+        commands=robot.get("commands", {}),
     )
     robot_service.add_robot(robot_config)
     return {"message": f"Robot '{robot_config.name}' added"}
@@ -313,18 +326,18 @@ async def test_robot(robot_id: str):
         raise HTTPException(status_code=404, detail="Robot not found")
 
     signal = RobotSignal(
-        signal_type="test",
-        data={"message": "Test signal from Nebula Talks"}
+        signal_type="test", data={"message": "Test signal from Nebula Talks"}
     )
 
     success = await robot_service._send_to_robot(robot_service.robots[robot_id], signal)
     return {
         "success": success,
-        "message": "Test signal sent" if success else "Test signal failed"
+        "message": "Test signal sent" if success else "Test signal failed",
     }
 
 
 # ========== myCobot Specific Endpoints ==========
+
 
 @app.get("/api/mycobot/status")
 async def mycobot_status():
@@ -332,7 +345,7 @@ async def mycobot_status():
     return {
         "connected": mycobot_client.connected,
         "host": mycobot_client.host,
-        "port": mycobot_client.port
+        "port": mycobot_client.port,
     }
 
 
@@ -358,14 +371,14 @@ async def trigger_mycobot_gesture(gesture: str):
     if gesture not in MYCOBOT_GESTURES:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown gesture. Available: {', '.join(MYCOBOT_GESTURES.keys())}"
+            detail=f"Unknown gesture. Available: {', '.join(MYCOBOT_GESTURES.keys())}",
         )
 
     success = await send_to_mycobot(gesture)
     return {
         "success": success,
         "gesture": gesture,
-        "message": MYCOBOT_GESTURES[gesture]
+        "message": MYCOBOT_GESTURES[gesture],
     }
 
 
@@ -381,10 +394,7 @@ async def mycobot_custom_command(command: dict):
     }
     """
     success = await send_to_mycobot("custom", command)
-    return {
-        "success": success,
-        "command": command
-    }
+    return {"success": success, "command": command}
 
 
 @app.get("/api/config", response_model=ConfigResponse)
@@ -431,7 +441,9 @@ async def create_prompt(prompt: EventPromptCreate):
     prompt_id = prompt.name.lower().replace(" ", "-").replace("/", "-")
 
     if prompt_id in prompts:
-        raise HTTPException(status_code=400, detail="Prompt with this name already exists")
+        raise HTTPException(
+            status_code=400, detail="Prompt with this name already exists"
+        )
 
     prompt_data = {
         "id": prompt_id,
@@ -441,7 +453,7 @@ async def create_prompt(prompt: EventPromptCreate):
         "voice": prompt.voice,
         "is_active": False,
         "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
+        "updated_at": datetime.now().isoformat(),
     }
 
     prompts[prompt_id] = prompt_data
@@ -508,12 +520,15 @@ async def activate_prompt(prompt_id: str):
 
     # Deactivate all and activate the specified one
     for pid in prompts:
-        prompts[pid]["is_active"] = (pid == prompt_id)
+        prompts[pid]["is_active"] = pid == prompt_id
         prompts[pid]["updated_at"] = datetime.now().isoformat()
 
     save_prompts(prompts)
 
-    return {"message": f"Prompt '{prompts[prompt_id]['name']}' activated", "prompt": prompts[prompt_id]}
+    return {
+        "message": f"Prompt '{prompts[prompt_id]['name']}' activated",
+        "prompt": prompts[prompt_id],
+    }
 
 
 @app.get("/api/prompts/{prompt_id}/activate", response_model=dict)
@@ -548,4 +563,5 @@ async def robot_dashboard():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
