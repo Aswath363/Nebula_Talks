@@ -195,13 +195,13 @@ async def detect_person(request: PersonDetectionRequest):
 
         # If user was NOT present and now IS present -> person entered frame
         if not user_was_present and user_is_present:
-            print("🚶 Person entered frame - starting celebration mode")
-            # Send celebration mode start signal to myCobot
-            await send_to_mycobot("start_celebrating")
+            print("🚶 Person entered frame - going to celebration pose")
+            # Send celebration pose signal to myCobot
+            await send_to_mycobot("go_to_celebrate_pose")
 
         # If user was present and spoke, and now left frame -> send robot signal
         if user_was_present and user_spoken and not user_is_present:
-            print("👤 User left after speaking - sending signal to myCobot")
+            print("👤 User left after speaking - sending wave signal to myCobot")
             # Send to myCobot
             await send_to_mycobot("wave_hand")
 
@@ -214,10 +214,10 @@ async def detect_person(request: PersonDetectionRequest):
             # Reset state
             user_spoken = False
 
-        # If user was present and now NOT present (with or without speaking) -> stop celebration and go to exit pose
+        # If user was present and now NOT present (with or without speaking) -> hold pose and go home
         if user_was_present and not user_is_present:
-            print("👋 Person left frame - stopping celebration and going to exit pose")
-            await send_to_mycobot("stop_celebrating_and_exit")
+            print("👋 Person left frame - holding celebration pose and going home")
+            await send_to_mycobot("hold_and_home")
 
         user_was_present = user_is_present
 

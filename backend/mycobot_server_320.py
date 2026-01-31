@@ -52,7 +52,7 @@ class MyCobotController:
         self.celebrate_stop_event = Event()
         # Celebration pose to use when person leaves
         self.EXIT_POSE = [-168.13, -52.99, 68.55, 93.16, -0.17, 0.26]
-        self.EXIT_POSE_DURATION = 15  # seconds to hold pose when person leaves
+        self.EXIT_POSE_DURATION = 7  # seconds to hold pose when person leaves
 
     def is_connected(self) -> bool:
         return self.mc is not None
@@ -184,32 +184,30 @@ class MyCobotController:
 
         self.go_home()
 
-    def start_celebrating(self):
-        """Start continuous celebration mode when person is present"""
+    def go_to_celebrate_pose(self):
+        """Go to celebration pose and stay there"""
         if not self.mc:
             return
 
-        if self.celebrating:
-            logger.info("Already celebrating")
-            return
+        logger.info("Moving to celebration pose")
+        self.mc.send_angles(self.EXIT_POSE, 50)
+        time.sleep(1)
 
         self.celebrating = True
-        self.celebrate_stop_event.clear()
 
-        logger.info("Starting continuous celebration mode")
-
-        # Start celebration thread
-        self.celebrate_thread = Thread(target=self._celebrate_cycle, daemon=True)
-        self.celebrate_thread.start()
-
-    def stop_celebrating_and_exit(self):
-        """Stop celebration and go to exit pose when person leaves"""
+    def hold_celebrate_and_home(self):
+        """Hold celebration pose for 7 seconds then go home"""
         if not self.celebrating:
-            logger.info("Not currently celebrating")
+            logger.info("Not in celebration mode")
             return
 
-        logger.info("Stopping celebration mode and moving to exit pose")
+        logger.info(f"Holding celebration pose for {self.EXIT_POSE_DURATION} seconds")
+        if self.mc:
+            time.sleep(self.EXIT_POSE_DURATION)
+
         self.celebrating = False
+        logger.info("Returning to home position")
+        self.go_home()
         self.celebrate_stop_event.set()
 
         # Wait for thread to finish
@@ -302,22 +300,22 @@ class MyCobotController:
                 self.nod_head()
                 return {"status": "success", "action": "nod", "message": "Nodding!"}
 
-            elif action == "start_celebrating":
-                # Start continuous celebration when person enters
-                self.start_celebrating()
+            elif action == "go_to_celebrate_pose":
+                # Go to celebration pose when person enters
+                self.go_to_celebrate_pose()
                 return {
                     "status": "success",
-                    "action": "start_celebrating",
-                    "message": "Started celebration mode!",
+                    "action": "go_to_celebrate_pose",
+                    "message": "Moved to celebration pose",
                 }
 
-            elif action == "stop_celebrating_and_exit":
-                # Stop celebration and go to exit pose when person leaves
-                self.stop_celebrating_and_exit()
+            elif action == "hold_and_home":
+                # Hold celebration pose for 7 seconds then go home when person leaves
+                self.hold_celebrate_and_home()
                 return {
                     "status": "success",
-                    "action": "stop_celebrating_and_exit",
-                    "message": "Stopped celebration and moved to exit pose",
+                    "action": "hold_and_home",
+                    "message": "Held pose and returned home",
                 }
 
             elif action == "move_to":
@@ -403,10 +401,8 @@ async def handle_websocket(websocket, path):
                     "nod": {"action": "nod"},
                     "home": {"action": "home"},
                     # Person presence signals for celebration mode
-                    "start_celebrating": {"action": "start_celebrating"},
-                    "stop_celebrating_and_exit": {
-                        "action": "stop_celebrating_and_exit"
-                    },
+                    "go_to_celebrate_pose": {"action": "go_to_celebrate_pose"},
+                    "hold_and_home": {"action": "hold_and_home"},
                 }
 
                 command = action_mapping.get(signal_type, signal_data)
