@@ -1,7 +1,8 @@
 """
-myCobot 320 Pi WebSocket Server - Fixed Version
+myCobot 320 Pi WebSocket Server - Final Version
 
-Uses auto-detected port and baudrate that matches your working setup.
+Uses auto-detected port and correct baudrate (115200).
+Simplified celebration mode: person enters -> go to pose, person leaves -> hold 7s -> home.
 """
 
 import asyncio
@@ -11,13 +12,11 @@ from websockets.server import serve
 from pymycobot import MyCobot320
 import serial.tools.list_ports
 import time
-from threading import Thread, Event
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# Auto-detect port like your working script
 def get_mycobot_port():
     """Auto-detect myCobot serial port"""
     ports = list(serial.tools.list_ports.comports())
@@ -48,25 +47,12 @@ class MyCobotController:
 
         # Celebration mode
         self.celebrating = False
-        self.celebrate_thread = None
-        self.celebrate_stop_event = Event()
-        # Celebration pose to use when person leaves
+        # Exit pose: [-168.13, -52.99, 68.55, 93.16, -0.17, 0.26]
         self.EXIT_POSE = [-168.13, -52.99, 68.55, 93.16, -0.17, 0.26]
-        self.EXIT_POSE_DURATION = 7  # seconds to hold pose when person leaves
+        self.EXIT_HOLD_DURATION = 7  # seconds to hold pose when person leaves
 
     def is_connected(self) -> bool:
         return self.mc is not None
-
-    def move_joint_smooth(self, joint_id, angles, speed):
-        """Move joint smoothly through angles - like your working script"""
-        if not self.mc:
-            return
-
-        for angle in angles:
-            current = self.mc.get_angles()
-            current[joint_id - 1] = angle  # Convert to 0-indexed
-            self.mc.send_angles(current, speed)
-            time.sleep(0.5)
 
     def go_home(self):
         """Return to home position"""
@@ -75,6 +61,28 @@ class MyCobotController:
         logger.info("Going to home position")
         self.mc.send_angles([0, 0, 0, 0, 0, 0], 25)
         time.sleep(2)
+
+    def go_to_celebrate_pose(self):
+        """Go to celebration pose and stay there"""
+        if not self.mc:
+            return
+
+        logger.info(f"Moving to celebration pose: {self.EXIT_POSE}")
+        self.mc.send_angles(self.EXIT_POSE, 50)
+        time.sleep(1)
+        self.celebrating = True
+
+    def hold_pose_and_home(self):
+        """Hold celebration pose for 7 seconds then go home"""
+        if not self.mc:
+            return
+
+        logger.info(f"Holding celebration pose for {self.EXIT_HOLD_DURATION} seconds")
+        time.sleep(self.EXIT_HOLD_DURATION)
+
+        logger.info("Returning to home position")
+        self.celebrating = False
+        self.go_home()
 
     def wave_hand(self):
         """Wave hand gesture - using your working parameters"""
@@ -91,10 +99,15 @@ class MyCobotController:
         self.go_home()
 
         for _ in range(WAVE_COUNT):
-            self.move_joint_smooth(
-                TRUNK_JOINT, [WAVE_AMPLITUDE, -WAVE_AMPLITUDE], WAVE_SPEED
-            )
-            time.sleep(0.2)
+            current = self.mc.get_angles()
+            current[TRUNK_JOINT - 1] = WAVE_AMPLITUDE
+            self.mc.send_angles(current, WAVE_SPEED)
+            time.sleep(0.3)
+
+            current = self.mc.get_angles()
+            current[TRUNK_JOINT - 1] = -WAVE_AMPLITUDE
+            self.mc.send_angles(current, WAVE_SPEED)
+            time.sleep(0.3)
 
         self.go_home()
 
@@ -113,8 +126,15 @@ class MyCobotController:
         self.go_home()
 
         for _ in range(NOD_COUNT):
-            self.move_joint_smooth(NOD_JOINT, [NOD_AMPLITUDE, NOD_AMPLITUDE], NOD_SPEED)
-            time.sleep(0.2)
+            current = self.mc.get_angles()
+            current[NOD_JOINT - 1] = NOD_AMPLITUDE
+            self.mc.send_angles(current, NOD_SPEED)
+            time.sleep(0.3)
+
+            current = self.mc.get_angles()
+            current[NOD_JOINT - 1] = -NOD_AMPLITUDE
+            self.mc.send_angles(current, NOD_SPEED)
+            time.sleep(0.3)
 
         self.go_home()
 
@@ -184,75 +204,6 @@ class MyCobotController:
 
         self.go_home()
 
-    def go_to_celebrate_pose(self):
-        """Go to celebration pose and stay there"""
-        if not self.mc:
-            return
-
-        logger.info("Moving to celebration pose")
-        self.mc.send_angles(self.EXIT_POSE, 50)
-        time.sleep(1)
-
-        self.celebrating = True
-
-    def hold_celebrate_and_home(self):
-        """Hold celebration pose for 7 seconds then go home"""
-        if not self.celebrating:
-            logger.info("Not in celebration mode")
-            return
-
-        logger.info(f"Holding celebration pose for {self.EXIT_POSE_DURATION} seconds")
-        if self.mc:
-            time.sleep(self.EXIT_POSE_DURATION)
-
-        self.celebrating = False
-        logger.info("Returning to home position")
-        self.go_home()
-        self.celebrate_stop_event.set()
-
-        # Wait for thread to finish
-        if self.celebrate_thread and self.celebrate_thread.is_alive():
-            self.celebrate_thread.join(timeout=2)
-
-        # Move to exit pose and hold for 15 seconds
-        logger.info(f"Moving to exit pose: {self.EXIT_POSE}")
-        if self.mc:
-            self.mc.send_angles(self.EXIT_POSE, 50)
-            time.sleep(self.EXIT_POSE_DURATION)
-
-        # Return to home
-        logger.info("Returning to home position")
-        self.go_home()
-
-    def _celebrate_cycle(self):
-        """Background thread that continuously celebrates while person is present"""
-        try:
-            while self.celebrating and not self.celebrate_stop_event.is_set():
-                # Run the existing celebrate gesture
-                self.celebrate()
-
-                logger.info("Celebrating... waiting 5 seconds for next cycle")
-
-                # Wait 5 seconds before next celebration
-                if not self.celebrate_stop_event.wait(timeout=5):
-                    # If stop event was triggered, break
-                    logger.info("Stop event triggered")
-                    break
-
-            logger.info("Celebration cycle ended")
-
-        except Exception as e:
-            logger.error(f"Error in celebration cycle: {e}")
-            self.celebrating = False
-
-    def go_to_celebrate_pose(self):
-        """Move to celebration pose once"""
-        if not self.mc:
-            return
-
-        logger.info("Moving to celebration pose")
-        self.mc.send_angles(self.CELEBRATE_POSE, 50)
-
     def execute_command(self, command: dict):
         """Execute a command from Nebula Talks"""
         if not self.mc:
@@ -301,7 +252,6 @@ class MyCobotController:
                 return {"status": "success", "action": "nod", "message": "Nodding!"}
 
             elif action == "go_to_celebrate_pose":
-                # Go to celebration pose when person enters
                 self.go_to_celebrate_pose()
                 return {
                     "status": "success",
@@ -310,8 +260,7 @@ class MyCobotController:
                 }
 
             elif action == "hold_and_home":
-                # Hold celebration pose for 7 seconds then go home when person leaves
-                self.hold_celebrate_and_home()
+                self.hold_pose_and_home()
                 return {
                     "status": "success",
                     "action": "hold_and_home",
@@ -464,7 +413,6 @@ async def main():
 
 
 if __name__ == "__main__":
-    controller = None
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
